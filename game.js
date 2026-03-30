@@ -1122,7 +1122,7 @@ k.scene("ending", () => {
            k.pos(k.width()/2, 44), k.anchor("center"), k.color(255,222,50)]);
     k.add([k.text("D'Trattoria hot offen  •  Kalti Cola. Endli. 🥤", { size:18, font:"monospace", align:"center" }),
            k.pos(k.width()/2, 88), k.anchor("center"), k.color(255,255,255)]);
-    k.add([k.text("Ois Guate zum Dreißgsten!  Beschts italienisch's Desaster übberhaupt, { size:15, font:"monospace", align:"center" }),
+    k.add([k.text("Ois Guate zum Dreißgsten!  Beschts walsches Desaster übberhaupt!", { size:15, font:"monospace", align:"center" }),
            k.pos(k.width()/2, 118), k.anchor("center"), k.color(255,200,100)]);
     k.add([k.text("Mit Herz: Viki, Dan & Vera ❤️", { size:14, font:"monospace", align:"center" }),
            k.pos(k.width()/2, 144), k.anchor("center"), k.color(255,160,160)]);
