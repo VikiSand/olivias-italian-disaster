@@ -13,7 +13,6 @@ const k = kaplay({
     font: "Press Start 2P",
 });
 
-k.loadFont("Press Start 2P", "https://fonts.gstatic.com/s/pressstart2p/v15/e3t4euO8T-267oIAQAu6jDQyK3nRivNm.woff2");
 
 const CAR_W = 78, CAR_H = 36;
 
