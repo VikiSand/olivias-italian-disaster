@@ -10,7 +10,10 @@ const k = kaplay({
     letterbox: true,
     background: [0, 0, 0],
     canvas: document.querySelector("canvas") || undefined,
+    font: "Press Start 2P",
 });
+
+k.loadFont("Press Start 2P", "https://fonts.gstatic.com/s/pressstart2p/v15/e3t4euO8T-267oIAQAu6jDQyK3nRivNm.woff2");
 
 const CAR_W = 78, CAR_H = 36;
 
@@ -26,7 +29,7 @@ const C = {
 function titleText(str, y, size, col) {
     size = size || 42; col = col || C.white;
     return k.add([
-        k.text(str, { size, font: "monospace", align: "center" }),
+        k.text(str, { size, font: "Press Start 2P", align: "center" }),
         k.pos(k.width() / 2, y), k.anchor("center"), k.color(...col),
     ]);
 }
@@ -52,7 +55,7 @@ function bigBtn(str, y, scene) {
         k.anchor("center"), k.color(...C.green), k.area(), "btn",
     ]);
     k.add([
-        k.text(str, { size: 20, font: "monospace", align: "center" }),
+        k.text(str, { size: 20, font: "Press Start 2P", align: "center" }),
         k.pos(k.width() / 2, y), k.anchor("center"), k.color(...C.white), "btn",
     ]);
     btn.onClick(() => k.go(scene));
@@ -255,51 +258,75 @@ function burst(x, y, col, count) {
     }
 }
 
-// ── Touch / drag-to-move system ──────────────────────────────
-// Returns { update(player, minY, maxY, maxW, dt) }
-// On touch devices: drag anywhere → Olivia follows finger (clamped).
-// On desktop: no-op (keyboard handles movement).
+// ── Touch controls — split screen ────────────────────────────
+// LEFT half  → drag to move Olivia
+// RIGHT half → tap/hold to shoot
+// Desktop: no-op (keyboard + space handles everything)
 function makeTouchControls() {
     const IS_TOUCH = ('ontouchstart' in window) || (navigator.maxTouchPoints > 0);
-    let touchX = null, touchY = null;
+
+    // Track each touch by identifier so left/right hands are independent
+    const touches = {};   // id → { clientX, clientY }
+    let shootPressed = false;
 
     if (IS_TOUCH) {
         const canvas = document.querySelector("canvas");
-        // Prevent default scroll/zoom on the canvas
+
+        function getGameX(clientX) {
+            const rect = canvas.getBoundingClientRect();
+            return (clientX - rect.left) * (k.width() / rect.width);
+        }
+
+        function register(t) {
+            const gx = getGameX(t.clientX);
+            touches[t.identifier] = { clientX: t.clientX, clientY: t.clientY, isRight: gx > k.width() / 2 };
+        }
+
         canvas.addEventListener("touchstart", e => {
             e.preventDefault();
-            const t = e.touches[0];
-            touchX = t.clientX;
-            touchY = t.clientY;
+            for (const t of e.changedTouches) register(t);
+            shootPressed = Object.values(touches).some(t => t.isRight);
         }, { passive: false });
+
         canvas.addEventListener("touchmove", e => {
             e.preventDefault();
-            const t = e.touches[0];
-            touchX = t.clientX;
-            touchY = t.clientY;
+            for (const t of e.changedTouches) {
+                if (touches[t.identifier]) {
+                    touches[t.identifier].clientX = t.clientX;
+                    touches[t.identifier].clientY = t.clientY;
+                }
+            }
         }, { passive: false });
-        canvas.addEventListener("touchend",   () => { touchX = null; touchY = null; });
-        canvas.addEventListener("touchcancel",() => { touchX = null; touchY = null; });
+
+        canvas.addEventListener("touchend", e => {
+            for (const t of e.changedTouches) delete touches[t.identifier];
+            shootPressed = Object.values(touches).some(t => t.isRight);
+        });
+        canvas.addEventListener("touchcancel", e => {
+            for (const t of e.changedTouches) delete touches[t.identifier];
+            shootPressed = Object.values(touches).some(t => t.isRight);
+        });
     }
 
     return {
         isTouch: IS_TOUCH,
-        update(player, minY, maxY, maxW) {
-            if (!IS_TOUCH || touchX === null) return;
-            // Map raw client coords → game coords via canvas bounding rect
+        isShootPressed() { return shootPressed; },
+        update(player, minY, maxY) {
+            if (!IS_TOUCH) return;
+            // Find the left-half touch (move finger)
             const canvas = document.querySelector("canvas");
             const rect   = canvas.getBoundingClientRect();
             const scaleX = k.width()  / rect.width;
             const scaleY = k.height() / rect.height;
-            const gx = (touchX - rect.left)  * scaleX;
-            const gy = (touchY - rect.top)   * scaleY;
-            const halfW  = maxW || (k.width() / 2);
-            const SPEED  = 5;
-            // Lerp toward finger
-            const tx = Math.max(20, Math.min(halfW - 22, gx - 10));
-            const ty = Math.max(minY, Math.min(maxY - 38, gy - 19));
-            player.pos.x += (tx - player.pos.x) * SPEED * k.dt();
-            player.pos.y += (ty - player.pos.y) * SPEED * k.dt();
+            for (const t of Object.values(touches)) {
+                if (t.isRight) continue;
+                const gx = (t.clientX - rect.left) * scaleX;
+                const gy = (t.clientY - rect.top)  * scaleY;
+                const tx = Math.max(20, Math.min(k.width() / 2 - 22, gx - 10));
+                const ty = Math.max(minY, Math.min(maxY - 38, gy - 19));
+                player.pos.x += (tx - player.pos.x) * 5 * k.dt();
+                player.pos.y += (ty - player.pos.y) * 5 * k.dt();
+            }
         }
     };
 }
@@ -319,13 +346,13 @@ function addControls(player, minY, maxY, maxW) {
 }
 
 // ── Shoot (fires RIGHT) ───────────────────────────────────────
-// On desktop: Space/Z triggers shots.
-// On touch:   auto-fires continuously (handled via tickCd in onUpdate).
+// Desktop : Space / Z
+// Touch   : hold/tap RIGHT half of screen
 function addShooter(getBulletPos, bulletColor, touchControls) {
     let cd = 0;
     function shoot() {
         if (cd > 0) return;
-        cd = 0.16;
+        cd = 0.18;
         const p = getBulletPos();
         k.add([
             k.rect(20, 4), k.pos(p.x, p.y),
@@ -339,8 +366,7 @@ function addShooter(getBulletPos, bulletColor, touchControls) {
     return {
         tickCd(dt) {
             cd = Math.max(0, cd - dt);
-            // Auto-fire on touch devices
-            if (touchControls && touchControls.isTouch) shoot();
+            if (touchControls && touchControls.isTouch && touchControls.isShootPressed()) shoot();
         }
     };
 }
@@ -540,7 +566,7 @@ k.scene("howtoplay", () => {
         ["End     —  Kalti Cola in dr Trattoria! 🥤",       [255,150,150]],
     ];
     lines.forEach(([l,col],i) =>
-        k.add([k.text(l, { size: 16, font: "monospace" }), k.pos(78,118+i*26), k.color(...col)]));
+        k.add([k.text(l, { size: 16, font: "Press Start 2P" }), k.pos(78,118+i*26), k.color(...col)]));
     bigBtn("← Zrugg", 498, "title");
 });
 
@@ -639,15 +665,19 @@ k.scene("level1", () => {
     const winSmoke = makeWindowSmoke();
 
     let health = 1, kills = 0;
+    const TARGET = 25;
     const hbar    = makeBar(20, 50, 200, 18, [50,200,50], "GEDULD");
-    const killTxt = k.add([k.text("🚗 0 / 15", { size:16 }), k.pos(k.width()-170,50), k.fixed()]);
+    const killTxt = k.add([k.text(`🚗 0 / ${TARGET}`, { size:14 }), k.pos(k.width()-200,50), k.fixed()]);
 
     const ECOLS = [[188,44,44],[44,78,188],[188,152,28],[44,138,72],[168,92,44],[128,44,128]];
     const LANE_Y = [bounds.minY+20, bounds.minY+80, bounds.minY+145, bounds.minY+205];
+    let spawnInterval = 1.1;
+    let spawnHandle = k.loop(spawnInterval, spawnCar);
 
     function spawnCar() {
         const ly  = LANE_Y[Math.floor(k.rand(0, LANE_Y.length))];
-        const spd = k.rand(180, 350);
+        const boost = Math.min(kills * 8, 160);
+        const spd = k.rand(180 + boost, 350 + boost);
         const col = ECOLS[Math.floor(k.rand(0, ECOLS.length))];
         const cx  = k.width() + 14;
         k.add([k.rect(CAR_W,CAR_H), k.pos(cx,ly), k.color(...col),
@@ -662,14 +692,20 @@ k.scene("level1", () => {
         [[3,-2],[3,CAR_H-8],[CAR_W-14,-2],[CAR_W-14,CAR_H-8]].forEach(([ox,oy]) =>
             k.add([k.rect(11,9), k.pos(cx+ox,ly+oy), k.color(18,18,18),
                    k.move(k.LEFT,spd), k.offscreen({ destroy:true })]));
+        // Tighten spawn interval every 5 kills
+        const newInterval = Math.max(0.45, 1.1 - Math.floor(kills / 5) * 0.1);
+        if (newInterval !== spawnInterval) {
+            spawnInterval = newInterval;
+            if (spawnHandle) spawnHandle.cancel();
+            spawnHandle = k.loop(spawnInterval, spawnCar);
+        }
     }
-    k.loop(1.1, spawnCar);
 
     k.onCollide("bullet","enemy",(b,e) => {
         if (!b.exists()||!e.exists()) return;
         b.destroy(); burst(e.pos.x+CAR_W/2, e.pos.y+CAR_H/2, [255,200,50]); e.destroy();
-        kills++; killTxt.text = `🚗 ${kills} / 15`;
-        if (kills >= 15) { hbar.destroy(); k.go("intro2"); }
+        kills++; killTxt.text = `🚗 ${kills} / ${TARGET}`;
+        if (kills >= TARGET) { hbar.destroy(); k.go("intro2"); }
     });
     player.onCollide("enemy", (e) => {
         if (!e.exists()) return;
@@ -698,12 +734,16 @@ k.scene("level2", () => {
     const gun = addShooter(() => k.vec2(player.pos.x + 32, player.pos.y + 12), [255,255,80], touch);
 
     let health = 1, kills = 0;
+    const TARGET = 22;
     const hbar    = makeBar(20, 50, 200, 18, [50,200,50], "LAUN");
-    const killTxt = k.add([k.text("🏕️ 0 / 12", { size:16 }), k.pos(k.width()-180,50), k.fixed()]);
+    const killTxt = k.add([k.text(`🏕️ 0 / ${TARGET}`, { size:14 }), k.pos(k.width()-200,50), k.fixed()]);
+    let spawnInterval = 1.4;
+    let spawnHandle = k.loop(spawnInterval, spawnTourist);
 
     function spawnTourist() {
         const y   = k.rand(bounds.minY+10, bounds.maxY-45);
-        const spd = k.rand(70, 155);
+        const boost = Math.min(kills * 6, 100);
+        const spd = k.rand(70 + boost, 155 + boost);
         const cx  = k.width() + 22;
         k.add([k.rect(22,36), k.pos(cx,y), k.color(100,78,38),
                k.area({ width:18, height:32 }),
@@ -719,14 +759,19 @@ k.scene("level2", () => {
         [[5,0],[14,0]].forEach(([ox,oy]) =>
             k.add([k.rect(3,14),k.pos(cx+ox,y+oy),k.color(180,118,20),
                    k.move(k.LEFT,spd),k.offscreen({ destroy:true })]));
+        const newInterval = Math.max(0.5, 1.4 - Math.floor(kills / 5) * 0.1);
+        if (newInterval !== spawnInterval) {
+            spawnInterval = newInterval;
+            if (spawnHandle) spawnHandle.cancel();
+            spawnHandle = k.loop(spawnInterval, spawnTourist);
+        }
     }
-    k.loop(1.4, spawnTourist);
 
     k.onCollide("bullet","enemy",(b,e) => {
         if (!b.exists()||!e.exists()) return;
         b.destroy(); burst(e.pos.x+11, e.pos.y+18, [255,180,80], 5); e.destroy();
-        kills++; killTxt.text = `🏕️ ${kills} / 12`;
-        if (kills >= 12) { hbar.destroy(); k.go("intro3"); }
+        kills++; killTxt.text = `🏕️ ${kills} / ${TARGET}`;
+        if (kills >= TARGET) { hbar.destroy(); k.go("intro3"); }
     });
     player.onCollide("enemy",(e) => {
         if (!e.exists()) return;
@@ -750,12 +795,16 @@ k.scene("level3", () => {
     const gun = addShooter(() => k.vec2(player.pos.x + 32, player.pos.y + 12), [200,255,120], touch);
 
     let health = 1, kills = 0;
+    const TARGET = 25;
     const hbar    = makeBar(20, 50, 200, 18, [180,200,50], "LAUN");
-    const killTxt = k.add([k.text("🍾 0 / 15", { size:16 }), k.pos(k.width()-160,50), k.fixed()]);
+    const killTxt = k.add([k.text(`🍾 0 / ${TARGET}`, { size:14 }), k.pos(k.width()-200,50), k.fixed()]);
+    let spawnInterval = 0.9;
+    let spawnHandle = k.loop(spawnInterval, spawnBottle);
 
     function spawnBottle() {
         const y   = k.rand(bounds.minY+10, bounds.maxY-45);
-        const spd = k.rand(90, 190);
+        const boost = Math.min(kills * 7, 120);
+        const spd = k.rand(90 + boost, 190 + boost);
         const cx  = k.width() + 22;
         k.add([k.rect(12,34), k.pos(cx,y), k.color(28,115,38),
                k.area({ width:10, height:32 }),
@@ -766,8 +815,13 @@ k.scene("level3", () => {
                k.move(k.LEFT,spd), k.offscreen({ destroy:true })]);
         k.add([k.rect(12,12), k.pos(cx,y+8), k.color(245,235,195),
                k.move(k.LEFT,spd), k.offscreen({ destroy:true })]);
+        const newInterval = Math.max(0.4, 0.9 - Math.floor(kills / 5) * 0.08);
+        if (newInterval !== spawnInterval) {
+            spawnInterval = newInterval;
+            if (spawnHandle) spawnHandle.cancel();
+            spawnHandle = k.loop(spawnInterval, spawnBottle);
+        }
     }
-    k.loop(0.9, spawnBottle);
 
     k.onCollide("bullet","enemy",(b,e) => {
         if (!b.exists()||!e.exists()) return;
@@ -783,8 +837,8 @@ k.scene("level3", () => {
                 if (bub.age > 0.7 && bub.exists()) bub.destroy();
             });
         }
-        e.destroy(); kills++; killTxt.text = `🍾 ${kills} / 15`;
-        if (kills >= 15) { hbar.destroy(); k.go("intro4"); }
+        e.destroy(); kills++; killTxt.text = `🍾 ${kills} / ${TARGET}`;
+        if (kills >= TARGET) { hbar.destroy(); k.go("intro4"); }
     });
     player.onCollide("enemy",(e) => {
         if (!e.exists()) return;
@@ -808,12 +862,16 @@ k.scene("level4", () => {
     const gun = addShooter(() => k.vec2(player.pos.x + 32, player.pos.y + 12), [160,160,255], touch);
 
     let health = 1, kills = 0;
+    const TARGET = 18;
     const hbar    = makeBar(20, 50, 200, 18, [80,80,200], "LAUN");
-    const killTxt = k.add([k.text("😴 0 / 10", { size:16 }), k.pos(k.width()-160,50), k.fixed()]);
+    const killTxt = k.add([k.text(`😴 0 / ${TARGET}`, { size:14 }), k.pos(k.width()-200,50), k.fixed()]);
+    let spawnInterval = 1.8;
+    let spawnHandle = k.loop(spawnInterval, spawnViki);
 
     function spawnViki() {
         const y   = k.rand(bounds.minY+10, bounds.maxY-30);
-        const spd = k.rand(55, 125);
+        const boost = Math.min(kills * 5, 80);
+        const spd = k.rand(55 + boost, 125 + boost);
         const cx  = k.width() + 22;
         k.add([k.rect(44,22), k.pos(cx,y), k.color(200,160,128),
                k.area({ width:40, height:18 }),
@@ -833,8 +891,13 @@ k.scene("level4", () => {
             zz.age += k.dt();
             zz.pos.y = zz.baseY + Math.sin(zz.age*2.5)*7;
         });
+        const newInterval = Math.max(0.55, 1.8 - Math.floor(kills / 4) * 0.12);
+        if (newInterval !== spawnInterval) {
+            spawnInterval = newInterval;
+            spawnHandle.cancel();
+            spawnHandle = k.loop(spawnInterval, spawnViki);
+        }
     }
-    k.loop(1.8, spawnViki);
 
     k.onCollide("bullet","enemy",(b,e) => {
         if (!b.exists()||!e.exists()) return;
@@ -850,8 +913,8 @@ k.scene("level4", () => {
                 if (st.age>0.6&&st.exists()) st.destroy();
             });
         }
-        e.destroy(); kills++; killTxt.text = `😴 ${kills} / 10`;
-        if (kills >= 10) { hbar.destroy(); k.go("intro5"); }
+        e.destroy(); kills++; killTxt.text = `😴 ${kills} / ${TARGET}`;
+        if (kills >= TARGET) { hbar.destroy(); k.go("intro5"); }
     });
     player.onCollide("enemy",(e) => {
         if (!e.exists()) return;
@@ -875,12 +938,16 @@ k.scene("level5", () => {
     const gun = addShooter(() => k.vec2(player.pos.x + 32, player.pos.y + 12), [255,80,80], touch);
 
     let health = 1, kills = 0;
+    const TARGET = 20;
     const hbar    = makeBar(20, 50, 200, 18, [200,50,50], "LAUN");
-    const killTxt = k.add([k.text("🧠 0 / 12", { size:16 }), k.pos(k.width()-160,50), k.fixed()]);
+    const killTxt = k.add([k.text(`🧠 0 / ${TARGET}`, { size:14 }), k.pos(k.width()-200,50), k.fixed()]);
+    let spawnInterval = 1.3;
+    let spawnHandle = k.loop(spawnInterval, spawnBrain);
 
     function spawnBrain() {
         const baseY = k.rand(bounds.minY+15, bounds.maxY-45);
-        const spd   = k.rand(75, 165);
+        const boost = Math.min(kills * 7, 110);
+        const spd   = k.rand(75 + boost, 165 + boost);
         const cx    = k.width() + 25;
         const brain = k.add([k.circle(18), k.pos(cx,baseY), k.color(218,75,118), k.anchor("center"),
                               k.area({ scale:0.8 }),
@@ -895,14 +962,19 @@ k.scene("level5", () => {
             brain.age  += k.dt();
             brain.pos.y = brain.baseY + Math.sin(brain.age*7)*9;
         });
+        const newInterval = Math.max(0.45, 1.3 - Math.floor(kills / 4) * 0.1);
+        if (newInterval !== spawnInterval) {
+            spawnInterval = newInterval;
+            spawnHandle.cancel();
+            spawnHandle = k.loop(spawnInterval, spawnBrain);
+        }
     }
-    k.loop(1.3, spawnBrain);
 
     k.onCollide("bullet","enemy",(b,e) => {
         if (!b.exists()||!e.exists()) return;
         b.destroy(); burst(e.pos.x,e.pos.y,[220,75,118],8); e.destroy();
-        kills++; killTxt.text = `🧠 ${kills} / 12`;
-        if (kills >= 12) { hbar.destroy(); k.go("intro6"); }
+        kills++; killTxt.text = `🧠 ${kills} / ${TARGET}`;
+        if (kills >= TARGET) { hbar.destroy(); k.go("intro6"); }
     });
     player.onCollide("enemy",(e) => {
         if (!e.exists()) return;
@@ -926,10 +998,13 @@ k.scene("level6", () => {
     const gun = addShooter(() => k.vec2(player.pos.x + 32, player.pos.y + 12), [80,220,255], touch);
 
     let health = 1, kills = 0;
+    const TARGET = 18;
     const hbar    = makeBar(20, 50, 200, 18, [50,148,200], "LAUN");
-    const killTxt = k.add([k.text("🔥 0 / 10", { size:16 }), k.pos(k.width()-160,50), k.fixed()]);
+    const killTxt = k.add([k.text(`🔥 0 / ${TARGET}`, { size:14 }), k.pos(k.width()-200,50), k.fixed()]);
 
     const bbqSmokes = [];
+    let spawnInterval = 1.7;
+    let spawnHandle = k.loop(spawnInterval, spawnBBQ);
 
     function spawnBBQ() {
         const y   = k.rand(bounds.minY+10, bounds.maxY-55);
@@ -963,14 +1038,19 @@ k.scene("level6", () => {
                 bbqSmokes.push(s);
             }
         });
+        const newInterval = Math.max(0.5, 1.7 - Math.floor(kills / 4) * 0.12);
+        if (newInterval !== spawnInterval) {
+            spawnInterval = newInterval;
+            spawnHandle.cancel();
+            spawnHandle = k.loop(spawnInterval, spawnBBQ);
+        }
     }
-    k.loop(1.7, spawnBBQ);
 
     k.onCollide("bullet","enemy",(b,e) => {
         if (!b.exists()||!e.exists()) return;
         b.destroy(); burst(e.pos.x+23,e.pos.y+14,[255,200,50],10); burst(e.pos.x+23,e.pos.y+14,[255,120,20],6);
-        e.destroy(); kills++; killTxt.text = `🔥 ${kills} / 10`;
-        if (kills >= 10) { hbar.destroy(); k.go("ending"); }
+        e.destroy(); kills++; killTxt.text = `🔥 ${kills} / ${TARGET}`;
+        if (kills >= TARGET) { hbar.destroy(); k.go("ending"); }
     });
     player.onCollide("enemy",(e) => {
         if (!e.exists()) return;
