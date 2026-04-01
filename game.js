@@ -10,8 +10,10 @@ const k = kaplay({
     letterbox: true,
     background: [0, 0, 0],
     canvas: document.querySelector("canvas") || undefined,
-    font: "Press Start 2P",
+    font: "PressStart2P",
 });
+
+k.loadFont("PressStart2P", "https://cdn.jsdelivr.net/npm/@fontsource/press-start-2p@5/files/press-start-2p-latin-400-normal.woff2");
 
 
 const CAR_W = 78, CAR_H = 36;
@@ -28,7 +30,7 @@ const C = {
 function titleText(str, y, size, col) {
     size = size || 42; col = col || C.white;
     return k.add([
-        k.text(str, { size, font: "Press Start 2P", align: "center" }),
+        k.text(str, { size, font: "PressStart2P", align: "center" }),
         k.pos(k.width() / 2, y), k.anchor("center"), k.color(...col),
     ]);
 }
@@ -54,7 +56,7 @@ function bigBtn(str, y, scene) {
         k.anchor("center"), k.color(...C.green), k.area(), "btn",
     ]);
     k.add([
-        k.text(str, { size: 20, font: "Press Start 2P", align: "center" }),
+        k.text(str, { size: 20, font: "PressStart2P", align: "center" }),
         k.pos(k.width() / 2, y), k.anchor("center"), k.color(...C.white), "btn",
     ]);
     btn.onClick(() => k.go(scene));
@@ -565,7 +567,7 @@ k.scene("howtoplay", () => {
         ["End     —  Kalti Cola in dr Trattoria! 🥤",       [255,150,150]],
     ];
     lines.forEach(([l,col],i) =>
-        k.add([k.text(l, { size: 16, font: "Press Start 2P" }), k.pos(78,118+i*26), k.color(...col)]));
+        k.add([k.text(l, { size: 16, font: "PressStart2P" }), k.pos(78,118+i*26), k.color(...col)]));
     bigBtn("← Zrugg", 498, "title");
 });
 

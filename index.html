@@ -4,9 +4,6 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
     <title>Olivia's Best Italian Disaster</title>
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" rel="stylesheet">
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
         body { background: #000; display: flex; justify-content: center; align-items: center; height: 100vh; overflow: hidden; touch-action: none; }
@@ -15,13 +12,6 @@
 </head>
 <body>
     <script src="https://unpkg.com/kaplay@3001/dist/kaplay.js"></script>
-    <script>
-        // Wait for font before starting game so canvas picks it up
-        document.fonts.ready.then(() => {
-            const s = document.createElement('script');
-            s.src = 'game.js';
-            document.body.appendChild(s);
-        });
-    </script>
+    <script src="game.js"></script>
 </body>
 </html>
