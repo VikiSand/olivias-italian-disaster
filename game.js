@@ -538,10 +538,11 @@ k.scene("title", () => {
         k.add([k.rect(8,8), k.pos(k.rand(0,k.width()),k.rand(0,k.height())),
                k.color(...[C.green,C.red,C.yellow][Math.floor(k.rand(0,3))]), k.opacity(0.35)]);
 
-    titleText("Olivia's Beschts Italienisch's Desaster", 130, 38, C.white);
-    subtitle("A woahre G'schicht.",                 188, 22, C.yellow);
-    subtitle("Ois Guate zum Dreißgsten, Olivia! 🎉",218, 20, [255, 180, 100]);
-    subtitle("G'macht mit Herz vo Viki, Dan & Vera", 252, 16, [180, 180, 180]);
+    titleText("Olivia's Beschts", 95, 36, C.white);
+    titleText("Italienisch's Desaster", 145, 36, C.white);
+    subtitle("A woahre G'schicht.",                 210, 22, C.yellow);
+    subtitle("Ois Guate zum Dreißgsten, Olivia! 🎉",242, 20, [255, 180, 100]);
+    subtitle("G'macht mit Herz vo Viki, Dan & Vera", 276, 16, [180, 180, 180]);
     bigBtn("▶  LOS SPUIN",    328, "intro1");
     bigBtn("?  WIA GOAT DES", 403, "howtoplay");
     subtitle("Pfeiltoastn / WASD  •  Leerzeich / Z = SCHIASSN", 490, 13, [120,120,120]);
